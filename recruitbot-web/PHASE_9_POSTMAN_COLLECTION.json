@@ -1,0 +1,387 @@
+{
+  "info": {
+    "name": "Phase 9 - Final Validation Tests",
+    "description": "End-to-end validation and searchability testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "candidateId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "candidateName",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Test 1 - Upload Resume",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Save candidate ID and name for searchability tests",
+              "if (pm.response.code === 200) {",
+              "  const response = pm.response.json();",
+              "  pm.collectionVariables.set('candidateId', response.data.candidateId);",
+              "  pm.collectionVariables.set('candidateName', response.data.name);",
+              "  console.log('Candidate ID:', response.data.candidateId);",
+              "  console.log('Candidate Name:', response.data.name);",
+              "}",
+              "",
+              "// Test response structure",
+              "pm.test('Upload successful', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response.success).to.be.true;",
+              "  pm.expect(response.data).to.have.property('candidateId');",
+              "  pm.expect(response.data).to.have.property('name');",
+              "  pm.expect(response.data).to.have.property('processingTime');",
+              "});",
+              "",
+              "pm.test('Processing time tracked', () => {",
+              "  const response = pm.response.json();",
+              "  const pt = response.data.processingTime;",
+              "  pm.expect(pt).to.have.property('total');",
+              "  pm.expect(pt).to.have.property('extraction');",
+              "  pm.expect(pt).to.have.property('parsing');",
+              "  pm.expect(pt).to.have.property('embedding');",
+              "  pm.expect(pt).to.have.property('storage');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf",
+              "description": "Valid PDF resume (<5MB)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Step 1: Upload resume and capture candidate ID for searchability tests"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 2 - Check Retrieval Readiness",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Retrieval system ready', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.have.property('ready');",
+              "  pm.expect(response).to.have.property('resumeCount');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/search/readiness",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search", "readiness"]
+        },
+        "description": "Check if retrieval system has indexed data"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 3 - Wait for Indexing",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Wait 2 seconds for vector embedding indexing",
+              "setTimeout(() => {}, 2000);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "health"]
+        },
+        "description": "Delay to allow indexing to complete (2 seconds)"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 4 - Vector Search Test",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate search query from candidate name",
+              "const candidateName = pm.collectionVariables.get('candidateName');",
+              "const nameParts = candidateName.split(' ');",
+              "const searchQuery = nameParts[0] + ' professional';",
+              "pm.collectionVariables.set('searchQuery', searchQuery);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const candidateId = pm.collectionVariables.get('candidateId');",
+              "",
+              "pm.test('Vector search successful', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.have.property('results');",
+              "  pm.expect(response).to.have.property('duration');",
+              "});",
+              "",
+              "pm.test('Candidate found in vector search', () => {",
+              "  const response = pm.response.json();",
+              "  const found = response.results.some(r => ",
+              "    r.candidateId === candidateId || r._id === candidateId",
+              "  );",
+              "  pm.expect(found).to.be.true;",
+              "  console.log('✅ Vector search: Candidate found');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"{{searchQuery}}\",\n  \"searchType\": \"vector\",\n  \"topK\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/search",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search"]
+        },
+        "description": "Test if candidate is findable via vector semantic search"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 5 - Keyword Search Test",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const candidateId = pm.collectionVariables.get('candidateId');",
+              "",
+              "pm.test('Keyword search successful', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.have.property('results');",
+              "});",
+              "",
+              "pm.test('Candidate found in keyword search', () => {",
+              "  const response = pm.response.json();",
+              "  const found = response.results.some(r => ",
+              "    r.candidateId === candidateId || r._id === candidateId",
+              "  );",
+              "  pm.expect(found).to.be.true;",
+              "  console.log('✅ Keyword search: Candidate found');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"{{searchQuery}}\",\n  \"searchType\": \"keyword\",\n  \"topK\": 10\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/search",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search"]
+        },
+        "description": "Test if candidate is findable via BM25 keyword search"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 6 - Hybrid Search Test",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const candidateId = pm.collectionVariables.get('candidateId');",
+              "",
+              "pm.test('Hybrid search successful', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.have.property('results');",
+              "});",
+              "",
+              "pm.test('Candidate found in hybrid search', () => {",
+              "  const response = pm.response.json();",
+              "  const found = response.results.some(r => ",
+              "    r.candidateId === candidateId || r._id === candidateId",
+              "  );",
+              "  pm.expect(found).to.be.true;",
+              "  console.log('✅ Hybrid search: Candidate found');",
+              "});",
+              "",
+              "// Summary",
+              "console.log('');",
+              "console.log('=== SEARCHABILITY TEST COMPLETE ===');",
+              "console.log('Candidate:', pm.collectionVariables.get('candidateName'));",
+              "console.log('ID:', pm.collectionVariables.get('candidateId'));",
+              "console.log('Search Query:', pm.collectionVariables.get('searchQuery'));",
+              "console.log('✅ All search modes passed!');"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"{{searchQuery}}\",\n  \"searchType\": \"hybrid\",\n  \"topK\": 10,\n  \"bm25Weight\": 0.5,\n  \"vectorWeight\": 0.5\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/search",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search"]
+        },
+        "description": "Test if candidate is findable via hybrid (combined) search"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 7 - Get Candidate by ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Candidate retrieval successful', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.have.property('_id');",
+              "  pm.expect(response).to.have.property('name');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/search/resumes/{{candidateId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search", "resumes", "{{candidateId}}"]
+        },
+        "description": "Verify candidate can be retrieved by ID"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 8 - List All Resumes",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const candidateId = pm.collectionVariables.get('candidateId');",
+              "",
+              "pm.test('Resume list retrieved', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const response = pm.response.json();",
+              "  pm.expect(response).to.be.an('array');",
+              "});",
+              "",
+              "pm.test('Uploaded candidate in list', () => {",
+              "  const response = pm.response.json();",
+              "  const found = response.some(r => r._id === candidateId);",
+              "  pm.expect(found).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/search/resumes?limit=50",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "search", "resumes"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "50"
+            }
+          ]
+        },
+        "description": "Verify candidate appears in full resume list"
+      },
+      "response": []
+    }
+  ]
+}

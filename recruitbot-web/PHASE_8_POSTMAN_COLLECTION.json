@@ -1,0 +1,387 @@
+{
+  "info": {
+    "name": "Phase 8 - Error Handling Tests",
+    "description": "Test different error scenarios for resume ingestion with retry logic",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Test 1 - Successful Upload",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf",
+              "description": "Valid PDF resume (<5MB)"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Baseline test - successful upload with no errors"
+      },
+      "response": []
+    },
+    {
+      "name": "Test 2 - Network Error (Server Down)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:9999/v1/resume/inject",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "9999",
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test network error - connects to non-existent port. Expected: Network error with retry."
+      },
+      "response": []
+    },
+    {
+      "name": "Test 3 - 500 Server Error",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// NOTE: Requires backend mock - add to ingestionController.ts:",
+              "// return res.status(500).json({ ",
+              "//   error: 'Internal server error', ",
+              "//   details: 'Database connection failed' ",
+              "// });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test 500 server error. Expected: Retryable error with 3 attempts."
+      },
+      "response": [
+        {
+          "name": "500 Error Response",
+          "originalRequest": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/resume/inject"
+            }
+          },
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": false,\n  \"error\": \"Internal server error\",\n  \"details\": \"Database connection failed\",\n  \"statusCode\": 500\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 4 - 400 Validation Error",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Backend mock:",
+              "// return res.status(400).json({ ",
+              "//   error: 'Invalid file format', ",
+              "//   details: 'PDF appears to be corrupted' ",
+              "// });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test 400 validation error. Expected: NOT retryable."
+      },
+      "response": [
+        {
+          "name": "400 Error Response",
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"Invalid file format\",\n  \"details\": \"PDF appears to be corrupted\",\n  \"statusCode\": 400\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 5 - 413 File Too Large",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Backend mock:",
+              "// return res.status(413).json({ ",
+              "//   error: 'File too large', ",
+              "//   details: 'Maximum file size is 5 MB' ",
+              "// });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/large-resume.pdf",
+              "description": "PDF larger than 5MB"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test 413 payload too large. Expected: NOT retryable."
+      },
+      "response": [
+        {
+          "name": "413 Error Response",
+          "status": "Payload Too Large",
+          "code": 413,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"File too large\",\n  \"details\": \"Maximum file size is 5 MB\",\n  \"statusCode\": 413\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 7 - PDF Extraction Failed",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Backend mock:",
+              "// return res.status(500).json({ ",
+              "//   error: 'PDF extraction failed', ",
+              "//   details: 'Unable to parse PDF structure',",
+              "//   stage: 'extraction'",
+              "// });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test processing error at extraction stage. Expected: ProcessingErrorCard with FileSearch icon."
+      },
+      "response": [
+        {
+          "name": "Extraction Failed Response",
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"PDF extraction failed\",\n  \"details\": \"Unable to parse PDF structure\",\n  \"stage\": \"extraction\",\n  \"statusCode\": 500\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 8 - Resume Parsing Failed",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test processing error at parsing stage."
+      },
+      "response": [
+        {
+          "name": "Parsing Failed Response",
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"Resume parsing failed\",\n  \"details\": \"Could not identify resume sections\",\n  \"stage\": \"parsing\",\n  \"statusCode\": 500\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 9 - Embedding Generation Failed",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test processing error at embedding stage."
+      },
+      "response": [
+        {
+          "name": "Embedding Failed Response",
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"Embedding generation failed\",\n  \"details\": \"OpenAI API key invalid\",\n  \"stage\": \"embedding\",\n  \"statusCode\": 500\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test 10 - Database Storage Failed",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/valid-resume.pdf"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/resume/inject",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "resume", "inject"]
+        },
+        "description": "Test processing error at storage stage."
+      },
+      "response": [
+        {
+          "name": "Storage Failed Response",
+          "status": "Internal Server Error",
+          "code": 500,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"success\": false,\n  \"error\": \"Database storage failed\",\n  \"details\": \"MongoDB connection lost\",\n  \"stage\": \"storage\",\n  \"statusCode\": 500\n}"
+        }
+      ]
+    },
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Check if backend is running"
+      },
+      "response": [
+        {
+          "name": "Health Response",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"ok\",\n  \"timestamp\": \"2026-09-17T10:30:00.000Z\"\n}"
+        }
+      ]
+    }
+  ]
+}
